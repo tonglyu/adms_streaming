@@ -1,4 +1,3 @@
-package adms.kafka.constants;
 
 public enum Topics {
     PROD {
