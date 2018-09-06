@@ -1,0 +1,39 @@
+#config
+**/resources/
+**/sample_code/
+
+
+# sbt
+# (may want to keep parts of 'project')
+bin/
+project/
+target/
+build/
+lib/
+jaas/
+
+# eclipse
+build
+.classpath
+.project
+.settings
+.worksheet
+
+# intellij idea
+*.log
+*.iml
+*.ipr
+*.iws
+.idea
+
+# mac
+.DS_Store
+
+# other?
+.history
+.scala_dependencies
+.cache
+.cache-main
+
+#general
+*.class
