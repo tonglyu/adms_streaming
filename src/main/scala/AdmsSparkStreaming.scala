@@ -104,20 +104,6 @@ object AdmsSparkStreaming {
     speedAverage.toList
   }
 
-  def test(speedAverage: List[String]):Unit = {
-    for (snesorRecord <- speedAverage) {
-      val sensorJsonObject = parse(snesorRecord)
-      val date_and_time = (sensorJsonObject \\ "date_and_time").values("date_and_time").toString
-      val id = (sensorJsonObject \\ "sensorId").values("sensorId").toString.toInt
-      val lat = (sensorJsonObject \\ "lat").values("lat").toString.toDouble
-      val lon = (sensorJsonObject \\ "lon").values("lon").toString.toDouble
-      val speed = (sensorJsonObject \\ "speed").values("speed").toString.toDouble
-
-      println("date_and_time:" + date_and_time, "id:" + id, "lat:" + lat, "lon:" + lon, "speed:" + speed)
-
-    }
-  }
-
   private def tranTime2String(timestamp: Long): String = {
     val date_and_time = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
     date_and_time.format(timestamp * 1000)
