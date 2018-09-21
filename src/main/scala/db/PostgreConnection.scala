@@ -6,7 +6,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 
 object PostgreConnection {
-  val session = SparkSession.builder()
+  private val session = SparkSession.builder()
     .master("local[2]")
     .appName("PostgreConnection")
     .getOrCreate()
@@ -14,12 +14,12 @@ object PostgreConnection {
   val dbProperties = new Properties()
   dbProperties.load(getClass.getClassLoader().getResourceAsStream("postgre-config.properties"))
 
-  val hostname = dbProperties.getProperty("hostname")
-  val port = dbProperties.getProperty("port")
-  val database = dbProperties.getProperty("database")
-  val jdbc_url = s"jdbc:postgresql://${hostname}:${port}/${database}"
+  private val hostname = dbProperties.getProperty("hostname")
+  private val port = dbProperties.getProperty("port")
+  private val database = dbProperties.getProperty("database")
+  private val jdbc_url = s"jdbc:postgresql://${hostname}:${port}/${database}"
 
-  def main(args: Array[String]): Unit ={
+  def main(args: Array[String]): Unit = {
     val start_time = System.nanoTime()
     val end_time = System.nanoTime()
     val time = (end_time - start_time) / 1000000000
@@ -28,28 +28,34 @@ object PostgreConnection {
 
   /**
     * Get highway.highway_congestion_config_view table from PostgreSQL
+    *
     * @return RDD(sensorId, (lat,lon))
     */
-  def getHighwayConfig() : RDD[(Int,(Double,Double))] = {
-    val config_table = session.read.jdbc(jdbc_url,"highway.highway_congestion_config_view",dbProperties)
+  def getHighwayConfig(): RDD[(Int, (Double, Double))] = {
+    val config_table = session.read.jdbc(jdbc_url, "highway.highway_congestion_config_view", dbProperties)
     config_table.createOrReplaceTempView("highway_config")
 
-    val sqlStat = s"""
+    try {
+      val sqlStat =
+        s"""
                        select * from highway_config
                        where config_id= (select max(config_id) from highway_config)
                      """
 
-    val rs = session.sql(sqlStat)
-
-    val highway_config = rs.rdd.map(row => (row.getInt(4), row.getDouble(13), row.getDouble(14)))
-      .map{case ((link_id),lat,lon) =>(link_id,(lat,lon)) }
-
-    highway_config
+      val rs = session.sql(sqlStat)
+      val highway_config = rs.rdd.map(row => (row.getInt(4), row.getDouble(13), row.getDouble(14)))
+        .map { case ((link_id), lat, lon) => (link_id, (lat, lon)) }
+      highway_config
+    } catch {
+      case ex: Exception =>
+        ex.printStackTrace()
+        null
+    }
   }
 
 
-  def arterialTest():Unit = {
-    val config_table = session.read.jdbc(jdbc_url,"arterial.arterial_congestion_config_view",dbProperties)
+  def arterialTest(): Unit = {
+    val config_table = session.read.jdbc(jdbc_url, "arterial.arterial_congestion_config_view", dbProperties)
     config_table.createOrReplaceTempView("arterial_config")
     val data_table = session.read.jdbc(jdbc_url, "arterial.arterial_congestion_data", dbProperties)
     data_table.createOrReplaceGlobalTempView("arterial_data")
@@ -61,7 +67,8 @@ object PostgreConnection {
     var lat1, lon1, lat2, lon2 = 0.0
     //First Point
     try {
-      val sqlStat = s"""
+      val sqlStat =
+        s"""
                        select lat, lon from arterial_config
                        where config_id= (select max(config_id) from arterial_config)
                        and onstreet= $onestreet
@@ -73,7 +80,7 @@ object PostgreConnection {
         lat1 = rs.first().getDouble(0)
         lon1 = rs.first().getDouble(1)
       }
-      println(lat1,lon1)
+      println(lat1, lon1)
     } catch {
       case ex: Exception =>
         ex.printStackTrace()
@@ -82,7 +89,8 @@ object PostgreConnection {
 
     //Second Point
     try {
-      val sqlStat = s"""
+      val sqlStat =
+        s"""
                        select lat, lon from arterial_config
                        where config_id = (select max(config_id) from arterial_config)
                        and onstree t= $onestreet
@@ -94,7 +102,7 @@ object PostgreConnection {
         lat2 = rs.first().getDouble(0)
         lon2 = rs.first().getDouble(1)
       }
-      println(lat2,lon2)
+      println(lat2, lon2)
     } catch {
       case ex: Exception =>
         ex.printStackTrace()
@@ -106,13 +114,14 @@ object PostgreConnection {
 
     // identify the sensors on the corridor// identify the sensors on the corridor
     var sensors = ""
-    val lowerBound = Math.min(lat1,lat2)
-    val upperBound = Math.max(lat1,lat2)
-    val leftBound = Math.min(lon1,lon2)
-    val rightBound = Math.max(lon1,lon2)
+    val lowerBound = Math.min(lat1, lat2)
+    val upperBound = Math.max(lat1, lat2)
+    val leftBound = Math.min(lon1, lon2)
+    val rightBound = Math.max(lon1, lon2)
     try {
 
-      val sqlStat = s"""
+      val sqlStat =
+        s"""
                        select link_id from arterial_config
                        where config_id=(select max(config_id) from arterial_config)
                        and onstreet = $onestreet
@@ -135,7 +144,7 @@ object PostgreConnection {
     }
   }
 
-  private def bearing(x1: Double, y1: Double, x2: Double, y2: Double) :Double = {
+  private def bearing(x1: Double, y1: Double, x2: Double, y2: Double): Double = {
     var lat1 = x1 * Math.PI / 180
     var lat2 = x2 * Math.PI / 180
     var lon1 = y1 * Math.PI / 180
@@ -148,7 +157,7 @@ object PostgreConnection {
     normalizedBrng
   }
 
-  private def identifyDirection(bearing: Double) :Int = {
+  private def identifyDirection(bearing: Double): Int = {
     var direction = -1
     if (bearing < 45 || bearing >= 315) { // North
       direction = 0

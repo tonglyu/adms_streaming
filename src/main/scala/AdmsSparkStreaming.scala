@@ -1,9 +1,9 @@
 import java.text.SimpleDateFormat
 
-import adms.kafka.constants.{Sensor, Topics}
 import avro.AvroSchema
 import com.google.gson.Gson
-import db.PostgreConnection
+import db.{MySQLConnection, PostgreConnection}
+import net.liftweb.json.parse
 import org.apache.kafka.common.security.JaasUtils
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, StringDeserializer}
 import org.apache.spark._
@@ -38,7 +38,6 @@ object AdmsSparkStreaming {
   val WINDOW_SIZE = 5
 
   def main(args: Array[String]): Unit = {
-    //Create the DStream
     val stream = KafkaUtils.createDirectStream[String, Array[Byte]](
       ssc,
       PreferConsistent,
@@ -57,9 +56,9 @@ object AdmsSparkStreaming {
             (message.get("link_id").toString.toInt, (data_and_time, message.get("speed").toString.toDouble))
           })
         val sensorRecords = highway_config_table.join(records)
-          .map{case(link_id,((lat,lon),(timestamp, speed))) => ((link_id, lat, lon),(timestamp, speed))}.collect().toMap
+          .map { case (link_id, ((lat, lon), (timestamp, speed))) => ((link_id, lat, lon), (timestamp, speed)) }.collect().toMap
         val speed = calculateAvgSpeed(sensorRecords, speedSumHistory)
-        println(speed)
+        MySQLConnection.insert2LatestTable(speed)
       }
     })
 
@@ -69,12 +68,13 @@ object AdmsSparkStreaming {
 
   /**
     * Calculate the avg speed for last five batches(about 2.5min) for each sensor
-    * @param sensorRecords the current batch of sensor records
+    *
+    * @param sensorRecords   the current batch of sensor records
     * @param speedSumHistory the history map recording past queue for each sensor
-    * @return a json string: [{"date_and_time":"2018-09-06 11:55:32","sensorId":773507,"lat":33.994235,"lon":-117.897917,"speed":65.4},...]
+    * @return list of string: [{"date_and_time":"2018-09-06 11:55:32","sensorId":773507,"lat":33.994235,"lon":-117.897917,"speed":65.4},...]
     */
   def calculateAvgSpeed(sensorRecords: Map[(Int, Double, Double), (String, Double)], speedSumHistory: mutable.Map[(Int, Double, Double), (String, Queue[Double])]):
-  String = {
+  List[String] = {
     if (speedSumHistory.isEmpty) {
       sensorRecords.foreach(sensor => {
         speedSumHistory.getOrElseUpdate(sensor._1, (sensor._2._1, Queue(sensor._2._2)))
@@ -100,7 +100,22 @@ object AdmsSparkStreaming {
       val jsonElement = gson.toJson(element)
       speedAverage.append(jsonElement)
     })
-    speedAverage.toList.toString().substring(4).replace('(', '[').replace(')', ']')
+
+    speedAverage.toList
+  }
+
+  def test(speedAverage: List[String]):Unit = {
+    for (snesorRecord <- speedAverage) {
+      val sensorJsonObject = parse(snesorRecord)
+      val date_and_time = (sensorJsonObject \\ "date_and_time").values("date_and_time").toString
+      val id = (sensorJsonObject \\ "sensorId").values("sensorId").toString.toInt
+      val lat = (sensorJsonObject \\ "lat").values("lat").toString.toDouble
+      val lon = (sensorJsonObject \\ "lon").values("lon").toString.toDouble
+      val speed = (sensorJsonObject \\ "speed").values("speed").toString.toDouble
+
+      println("date_and_time:" + date_and_time, "id:" + id, "lat:" + lat, "lon:" + lon, "speed:" + speed)
+
+    }
   }
 
   private def tranTime2String(timestamp: Long): String = {
